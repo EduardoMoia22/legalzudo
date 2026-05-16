@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Autofoda Instagram</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">IG</div>
+          <div>
+            <strong>Autofoda</strong>
+            <span>Instagram Ops</span>
+          </div>
+        </div>
+        <nav>
+          <a href="#accounts">Contas</a>
+          <a href="#library">Mídias</a>
+          <a href="#remotePosts">Posts</a>
+          <a href="#commentInbox">Comentários</a>
+          <a href="#events">Eventos</a>
+          <a href="#settings">Setup</a>
+        </nav>
+        <div class="sidebar-note">
+          <span>API oficial</span>
+          <p>OAuth, publicação e fila usando endpoints da Meta.</p>
+        </div>
+      </aside>
+
+      <main>
+        <header class="topbar">
+          <div>
+            <h1>Painel de publicação</h1>
+            <p>Conecte contas, aprove mídias e controle os horários de postagem.</p>
+          </div>
+          <div class="topbar-actions">
+            <button class="secondary" id="syncBtn">Sincronizar /videos</button>
+            <a class="primary" href="/auth/login">Conectar Instagram</a>
+          </div>
+        </header>
+
+        <section class="metrics" id="metrics"></section>
+
+        <section class="grid two" id="accounts">
+          <div class="panel">
+            <div class="panel-head">
+              <div>
+                <h2>Contas conectadas</h2>
+                <p>Agendamento e publicação são independentes por conta.</p>
+              </div>
+            </div>
+            <div class="account-list" id="accountList"></div>
+          </div>
+
+          <div class="panel" id="settings">
+            <div class="panel-head">
+              <div>
+                <h2>Configuração da conta</h2>
+                <p>Selecione uma conta para ajustar cron e padrão de publicação.</p>
+              </div>
+            </div>
+            <form id="accountForm" class="form muted-empty">
+              <input type="hidden" id="accountId" />
+              <label>
+                Conta selecionada
+                <input id="accountLabel" disabled placeholder="Nenhuma conta selecionada" />
+              </label>
+              <div class="form-row">
+                <label>
+                  Posts por dia
+                  <input id="postsPerDay" type="number" min="1" max="100" value="2" />
+                </label>
+                <label>
+                  Horários
+                  <input id="postTimes" placeholder="10:00,19:00" />
+                </label>
+              </div>
+              <label>
+                Legenda padrão
+                <textarea id="defaultCaption" rows="3"></textarea>
+              </label>
+              <div class="switch-row">
+                <label><input id="active" type="checkbox" /> Conta ativa</label>
+                <label><input id="publishAsReels" type="checkbox" /> Publicar como Reels</label>
+                <label><input id="shareToFeed" type="checkbox" /> Compartilhar no feed</label>
+              </div>
+              <div class="button-row">
+                <button type="submit" class="primary">Salvar configuração</button>
+                <button type="button" class="secondary" id="publishNextBtn">Postar próximo aprovado</button>
+                <button type="button" class="secondary" id="refreshTokenBtn">Renovar token</button>
+              </div>
+            </form>
+          </div>
+        </section>
+
+        <section class="panel" id="library">
+          <div class="panel-head">
+            <div>
+              <h2>Biblioteca de mídias</h2>
+              <p>Suba vídeos, JPEG ou PNG. PNG é convertido para JPEG antes de publicar.</p>
+            </div>
+            <div class="library-actions">
+              <button class="secondary" id="approveAllBtn" type="button">Aprovar tudo</button>
+              <div class="tabs" id="statusTabs">
+                <button data-status="" class="active">Todas</button>
+                <button data-status="pending">Pendentes</button>
+                <button data-status="approved">Aprovadas</button>
+                <button data-status="published">Publicadas</button>
+                <button data-status="failed">Falhas</button>
+              </div>
+            </div>
+          </div>
+
+          <form id="uploadForm" class="upload">
+            <input type="file" name="media" accept="video/mp4,video/quicktime,image/jpeg,image/png,.mp4,.mov,.jpg,.jpeg,.png" multiple required />
+            <textarea name="caption" rows="3" placeholder="Legenda opcional aplicada ao lote"></textarea>
+            <button class="secondary" type="submit">Enviar mídias</button>
+          </form>
+
+          <div class="bulk-caption">
+            <textarea id="bulkCaption" rows="4" placeholder="Legenda única para aplicar em todas as mídias editáveis"></textarea>
+            <button class="secondary" id="applyCaptionAllBtn" type="button">Aplicar legenda em tudo</button>
+          </div>
+
+          <div class="bulk-caption">
+            <textarea id="approvedCaption" rows="4" placeholder="Nova legenda para todos os vídeos/mídias já aprovados"></textarea>
+            <button class="secondary" id="applyApprovedCaptionBtn" type="button">Alterar legenda dos aprovados</button>
+          </div>
+
+          <div class="carousel-tools">
+            <textarea id="carouselCaption" rows="3" placeholder="Legenda do carrossel; se vazio, usa a primeira mídia"></textarea>
+            <button class="primary" id="publishCarouselBtn" type="button">Publicar carrossel selecionado</button>
+            <span class="meta" id="carouselCount">0 selecionadas</span>
+          </div>
+
+          <div class="media-list" id="mediaList"></div>
+          <div class="pagination">
+            <button class="secondary" id="prevMediaPage" type="button">Anterior</button>
+            <span class="meta" id="mediaPageInfo">Página 1</span>
+            <button class="secondary" id="nextMediaPage" type="button">Próxima</button>
+          </div>
+        </section>
+
+        <section class="grid posts-grid" id="remotePosts">
+          <div class="panel">
+            <div class="panel-head">
+              <div>
+                <h2>Posts da conta</h2>
+                <p>Sincronize posts já publicados e abra os comentários de cada mídia.</p>
+              </div>
+              <button class="secondary" id="syncPostsBtn">Sincronizar posts</button>
+            </div>
+            <div class="remote-post-list" id="remotePostList"></div>
+          </div>
+
+          <div class="panel" id="commentInbox">
+            <div class="panel-head">
+              <div>
+                <h2>Comentários</h2>
+                <p>Responder, ocultar, reexibir ou excluir comentários do post selecionado.</p>
+              </div>
+              <button class="secondary" id="syncCommentsBtn">Sincronizar comentários</button>
+            </div>
+            <div class="comment-list" id="commentList"></div>
+          </div>
+        </section>
+
+        <section class="panel" id="events">
+          <div class="panel-head">
+            <div>
+              <h2>Eventos recentes</h2>
+              <p>Histórico de containers, publicações e falhas retornadas pela Meta.</p>
+            </div>
+          </div>
+          <div class="event-list" id="eventList"></div>
+        </section>
+      </main>
+    </div>
+
+    <div class="toast" id="toast"></div>
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>
