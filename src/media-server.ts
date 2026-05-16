@@ -48,7 +48,7 @@ function safeFilename(filename: string): string {
 }
 
 function publicMediaUrl(config: AppConfig, filename: string): string {
-  return `${config.publicBaseUrl}/media/${encodeURIComponent(filename)}?key=${encodeURIComponent(config.publicFileKey)}`;
+  return `${config.r2PublicBaseUrl}/media/${encodeURIComponent(filename)}?key=${encodeURIComponent(config.publicFileKey)}`;
 }
 
 async function findPreviewPath(config: AppConfig, filename: string): Promise<string | null> {

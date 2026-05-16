@@ -20,7 +20,7 @@ import { Account, MediaItem } from "./types.js";
 
 function buildPublicUrl(config: AppConfig, media: MediaItem): string {
   if (media.public_url) return media.public_url;
-  return `${config.publicBaseUrl}/media/${encodeURIComponent(media.filename)}?key=${encodeURIComponent(config.publicFileKey)}`;
+  return `${config.r2PublicBaseUrl}/media/${encodeURIComponent(media.filename)}?key=${encodeURIComponent(config.publicFileKey)}`;
 }
 
 async function moveIfExists(source: string, targetDir: string): Promise<string | null> {
