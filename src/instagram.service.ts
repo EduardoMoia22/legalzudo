@@ -1,4 +1,4 @@
-import axios, { AxiosError } from "axios";
+import axios from "axios";
 import { AppConfig } from "./config.js";
 import { logger } from "./logger.js";
 import { Account } from "./types.js";
@@ -12,8 +12,10 @@ interface PublishResponse {
 }
 
 interface ContainerStatusResponse {
+  id?: string;
   status_code?: "EXPIRED" | "ERROR" | "FINISHED" | "IN_PROGRESS" | "PUBLISHED";
   status?: string;
+  error_message?: string;
 }
 
 export interface InstagramRemotePost {
@@ -65,12 +67,25 @@ function getErrorMessage(error: unknown): string {
     const data = error.response?.data as { error?: { message?: string } } | undefined;
     return data?.error?.message || error.message;
   }
+
   if (error instanceof Error) return error.message;
+
   return String(error);
 }
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function buildFormPayload(values: Record<string, string | number | boolean | undefined | null>): URLSearchParams {
+  const params = new URLSearchParams();
+
+  for (const [key, value] of Object.entries(values)) {
+    if (value === undefined || value === null) continue;
+    params.set(key, String(value));
+  }
+
+  return params;
 }
 
 export class InstagramService {
@@ -86,37 +101,50 @@ export class InstagramService {
     caption: string,
     mediaType: "video" | "image"
   ): Promise<string> {
-    logger.info("Meta", "Criando container");
-    const payload: Record<string, string | boolean> = {
-      caption
-    };
+    const endpoint = `${this.baseUrl}/${account.instagram_user_id}/media`;
 
-    if (mediaType === "image") {
-      payload.image_url = mediaUrl;
-    } else {
-      payload.media_type = account.publish_as_reels ? "REELS" : "VIDEO";
-      payload.video_url = mediaUrl;
-    }
+    logger.info("Meta", "Criando container", {
+      instagramUserId: account.instagram_user_id,
+      mediaType,
+      publishAsReels: account.publish_as_reels,
+      mediaUrl,
+      captionLength: caption.length
+    });
 
-    if (mediaType === "video" && account.publish_as_reels) {
-      payload.share_to_feed = account.share_to_feed;
-    }
+    const payload =
+      mediaType === "image"
+        ? buildFormPayload({
+          image_url: mediaUrl,
+          caption,
+          access_token: account.access_token
+        })
+        : buildFormPayload({
+          media_type: "REELS",
+          video_url: mediaUrl,
+          caption,
+          access_token: account.access_token
+
+          /**
+           * Deixa desligado no primeiro teste.
+           * Depois que publicar, você pode recolocar:
+           *
+           * share_to_feed: account.share_to_feed
+           */
+        });
 
     try {
-      const response = await axios.post<CreateContainerResponse>(
-        `${this.baseUrl}/${account.instagram_user_id}/media`,
-        payload,
-        {
-          headers: {
-            Authorization: `Bearer ${account.access_token}`,
-            "Content-Type": "application/json"
-          },
-          timeout: 30000
-        }
-      );
+      const response = await axios.post<CreateContainerResponse>(endpoint, payload, {
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        timeout: 120000
+      });
+
       logger.info("Meta", `Container criado: ${response.data.id}`);
+
       return response.data.id;
     } catch (error) {
+      logger.error("Meta", "Erro ao criar container", getMetaError(error));
       throw new MetaApiError(getErrorMessage(error), getMetaError(error));
     }
   }
@@ -126,58 +154,74 @@ export class InstagramService {
     mediaUrl: string,
     mediaType: "video" | "image"
   ): Promise<string> {
-    logger.info("Meta", "Criando item de carrossel");
-    const payload: Record<string, string | boolean> = {
-      is_carousel_item: true
-    };
+    const endpoint = `${this.baseUrl}/${account.instagram_user_id}/media`;
 
-    if (mediaType === "image") {
-      payload.image_url = mediaUrl;
-    } else {
-      payload.media_type = "VIDEO";
-      payload.video_url = mediaUrl;
-    }
+    logger.info("Meta", "Criando item de carrossel", {
+      instagramUserId: account.instagram_user_id,
+      mediaType,
+      mediaUrl
+    });
+
+    const payload =
+      mediaType === "image"
+        ? buildFormPayload({
+          is_carousel_item: true,
+          image_url: mediaUrl,
+          access_token: account.access_token
+        })
+        : buildFormPayload({
+          is_carousel_item: true,
+          media_type: "VIDEO",
+          video_url: mediaUrl,
+          access_token: account.access_token
+        });
 
     try {
-      const response = await axios.post<CreateContainerResponse>(
-        `${this.baseUrl}/${account.instagram_user_id}/media`,
-        payload,
-        {
-          headers: {
-            Authorization: `Bearer ${account.access_token}`,
-            "Content-Type": "application/json"
-          },
-          timeout: 30000
-        }
-      );
+      const response = await axios.post<CreateContainerResponse>(endpoint, payload, {
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        timeout: 120000
+      });
+
       logger.info("Meta", `Item de carrossel criado: ${response.data.id}`);
+
       return response.data.id;
     } catch (error) {
+      logger.error("Meta", "Erro ao criar item de carrossel", getMetaError(error));
       throw new MetaApiError(getErrorMessage(error), getMetaError(error));
     }
   }
 
   async createCarouselContainer(account: Account, children: string[], caption: string): Promise<string> {
-    logger.info("Meta", "Criando container de carrossel");
+    const endpoint = `${this.baseUrl}/${account.instagram_user_id}/media`;
+
+    logger.info("Meta", "Criando container de carrossel", {
+      instagramUserId: account.instagram_user_id,
+      childrenCount: children.length,
+      captionLength: caption.length
+    });
+
+    const payload = buildFormPayload({
+      media_type: "CAROUSEL",
+      children: children.join(","),
+      caption,
+      access_token: account.access_token
+    });
+
     try {
-      const response = await axios.post<CreateContainerResponse>(
-        `${this.baseUrl}/${account.instagram_user_id}/media`,
-        {
-          media_type: "CAROUSEL",
-          children: children.join(","),
-          caption
+      const response = await axios.post<CreateContainerResponse>(endpoint, payload, {
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded"
         },
-        {
-          headers: {
-            Authorization: `Bearer ${account.access_token}`,
-            "Content-Type": "application/json"
-          },
-          timeout: 30000
-        }
-      );
+        timeout: 120000
+      });
+
       logger.info("Meta", `Container de carrossel criado: ${response.data.id}`);
+
       return response.data.id;
     } catch (error) {
+      logger.error("Meta", "Erro ao criar container de carrossel", getMetaError(error));
       throw new MetaApiError(getErrorMessage(error), getMetaError(error));
     }
   }
@@ -186,13 +230,12 @@ export class InstagramService {
     try {
       const response = await axios.get<ContainerStatusResponse>(`${this.baseUrl}/${containerId}`, {
         params: {
-          fields: "status_code,status"
-        },
-        headers: {
-          Authorization: `Bearer ${account.access_token}`
+          fields: "id,status_code,status,error_message",
+          access_token: account.access_token
         },
         timeout: 30000
       });
+
       return response.data;
     } catch (error) {
       throw new MetaApiError(getErrorMessage(error), getMetaError(error));
@@ -204,10 +247,20 @@ export class InstagramService {
 
     while (Date.now() < timeoutAt) {
       const status = await this.getContainerStatus(account, containerId);
-      logger.info("Meta", `Status: ${status.status_code ?? "UNKNOWN"}${status.status ? ` - ${status.status}` : ""}`);
+
+      logger.info(
+        "Meta",
+        `Status container ${containerId}: ${status.status_code ?? "UNKNOWN"}${status.status ? ` - ${status.status}` : ""}`
+      );
 
       if (status.status_code === "FINISHED") return;
+
       if (status.status_code === "ERROR" || status.status_code === "EXPIRED") {
+        logger.error("Meta", "Container falhou no processamento", {
+          containerId,
+          status
+        });
+
         throw new MetaApiError(`Container processing failed: ${status.status_code}`, status);
       }
 
@@ -218,24 +271,31 @@ export class InstagramService {
   }
 
   async publishMedia(account: Account, containerId: string): Promise<string> {
-    logger.info("Meta", "Publicando midia");
+    const endpoint = `${this.baseUrl}/${account.instagram_user_id}/media_publish`;
+
+    logger.info("Meta", "Publicando midia", {
+      instagramUserId: account.instagram_user_id,
+      containerId
+    });
+
+    const payload = buildFormPayload({
+      creation_id: containerId,
+      access_token: account.access_token
+    });
+
     try {
-      const response = await axios.post<PublishResponse>(
-        `${this.baseUrl}/${account.instagram_user_id}/media_publish`,
-        {
-          creation_id: containerId
+      const response = await axios.post<PublishResponse>(endpoint, payload, {
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded"
         },
-        {
-          headers: {
-            Authorization: `Bearer ${account.access_token}`,
-            "Content-Type": "application/json"
-          },
-          timeout: 30000
-        }
-      );
+        timeout: 120000
+      });
+
       logger.info("Meta", `Publicado com sucesso: ${response.data.id}`);
+
       return response.data.id;
     } catch (error) {
+      logger.error("Meta", "Erro ao publicar midia", getMetaError(error));
       throw new MetaApiError(getErrorMessage(error), getMetaError(error));
     }
   }
@@ -247,14 +307,13 @@ export class InstagramService {
         {
           params: {
             fields: "id,caption,media_type,media_product_type,media_url,permalink,thumbnail_url,timestamp,like_count,comments_count",
-            limit: 50
-          },
-          headers: {
-            Authorization: `Bearer ${account.access_token}`
+            limit: 50,
+            access_token: account.access_token
           },
           timeout: 30000
         }
       );
+
       return response.data.data ?? [];
     } catch (error) {
       throw new MetaApiError(getErrorMessage(error), getMetaError(error));
@@ -268,14 +327,13 @@ export class InstagramService {
         {
           params: {
             fields: "id,text,username,hidden,like_count,timestamp,replies{id,text,username,hidden,like_count,timestamp}",
-            limit: 100
-          },
-          headers: {
-            Authorization: `Bearer ${account.access_token}`
+            limit: 100,
+            access_token: account.access_token
           },
           timeout: 30000
         }
       );
+
       return response.data.data ?? [];
     } catch (error) {
       throw new MetaApiError(getErrorMessage(error), getMetaError(error));
@@ -283,18 +341,19 @@ export class InstagramService {
   }
 
   async replyToComment(account: Account, instagramCommentId: string, message: string): Promise<string> {
+    const payload = buildFormPayload({
+      message,
+      access_token: account.access_token
+    });
+
     try {
-      const response = await axios.post<{ id: string }>(
-        `${this.baseUrl}/${instagramCommentId}/replies`,
-        { message },
-        {
-          headers: {
-            Authorization: `Bearer ${account.access_token}`,
-            "Content-Type": "application/json"
-          },
-          timeout: 30000
-        }
-      );
+      const response = await axios.post<{ id: string }>(`${this.baseUrl}/${instagramCommentId}/replies`, payload, {
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        timeout: 30000
+      });
+
       return response.data.id;
     } catch (error) {
       throw new MetaApiError(getErrorMessage(error), getMetaError(error));
@@ -302,18 +361,18 @@ export class InstagramService {
   }
 
   async setCommentHidden(account: Account, instagramCommentId: string, hidden: boolean): Promise<void> {
+    const payload = buildFormPayload({
+      hide: hidden,
+      access_token: account.access_token
+    });
+
     try {
-      await axios.post(
-        `${this.baseUrl}/${instagramCommentId}`,
-        { hide: hidden },
-        {
-          headers: {
-            Authorization: `Bearer ${account.access_token}`,
-            "Content-Type": "application/json"
-          },
-          timeout: 30000
-        }
-      );
+      await axios.post(`${this.baseUrl}/${instagramCommentId}`, payload, {
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        timeout: 30000
+      });
     } catch (error) {
       throw new MetaApiError(getErrorMessage(error), getMetaError(error));
     }
@@ -322,8 +381,8 @@ export class InstagramService {
   async deleteComment(account: Account, instagramCommentId: string): Promise<void> {
     try {
       await axios.delete(`${this.baseUrl}/${instagramCommentId}`, {
-        headers: {
-          Authorization: `Bearer ${account.access_token}`
+        params: {
+          access_token: account.access_token
         },
         timeout: 30000
       });
