@@ -7,7 +7,7 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
-    "cron:publish": "node dist/cron-entry.js",
+    "cron:publish": "node dist/src/cron-entry.js",
     "dev": "tsx watch src/index.ts",
     "db:up": "docker compose up -d postgres",
     "db:logs": "docker compose logs -f postgres",
